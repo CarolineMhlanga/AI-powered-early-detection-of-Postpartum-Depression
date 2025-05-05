@@ -1,0 +1,114 @@
+# AI-Powered Early Detection of Postpartum Depression
+# ---------------------------------------------------
+# This script performs:
+# - Data loading
+# - Preprocessing (numerical + sentiment extraction from clinical notes)
+# - Model training using XGBoost
+# - Evaluation (confusion matrix, F1-score)
+# - SHAP explainability
+# ----------------- Dependencies --------------------
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import shap
+import seaborn as sns
+
+from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import classification_report, confusion_matrix, ConfusionMatrixDisplay
+from xgboost import XGBClassifier
+
+# ----------------- Load Dataset --------------------
+# Replace this path with your actual dataset path
+DATA_PATH = 'ppd_sample.csv'
+from datetime import date
+
+today = date.today()
+age = today
+
+# Define other variables
+bmi = 24.3
+epds_score = 13
+clinical_notes = "She feels sad and overwhelmed"
+ppd = 1
+
+age,bmi,epds_score,clinical_notes,ppd
+28,24.3,13,"She feels sad and overwhelmed",1
+32,26.1,5,"Patient is coping well",0
+...
+# Example CSV structure:
+# age,bmi,epds_score,clinical_notes,ppd
+# 28,24.3,13,"She feels sad and overwhelmed",1
+# 32,26.1,5,"Patient is coping well",0
+
+df = pd.read_csv(DATA_PATH)
+
+# ----------------- Sentiment Analysis --------------
+# Use VADER to score emotional tone of clinical notes
+analyzer = SentimentIntensityAnalyzer()
+df['sentiment_score'] = df['clinical_notes'].apply(lambda note: analyzer.polarity_scores(note)['compound'])
+if 'clinical_notes' not in df.columns:
+    print("Column 'clinical_notes' is missing.")
+# ----------------- Preprocessing -------------------
+# Fill or drop missing values
+df = df.dropna(subset=['age', 'bmi', 'epds_score', 'sentiment_score', 'ppd'])
+
+# Feature matrix (X) and target vector (y)
+X = df[['age', 'bmi', 'epds_score', 'sentiment_score']]
+y = df['ppd']
+
+# Check unique classes
+unique_classes = y.unique()
+print(f"Unique classes: {unique_classes}")
+print(f"Number of classes: {len(unique_classes)}")
+
+# Adjust test_size if necessary
+if len(unique_classes) > 2:
+    test_size = 0.2  # Or another appropriate value
+else:
+    test_size = max(1, len(y) // 5)  # Ensure there's at least one sample for each class
+
+
+# ----------------- Train/Test Split ----------------
+from sklearn.model_selection import train_test_split
+
+# Ensure test_size is appropriate
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y, stratify=y, test_size=2, random_state=42
+)
+
+# Model Training
+model = XGBClassifier(use_label_encoder=False, eval_metric='logloss')
+model.fit(X_train, y_train)
+
+# ----------------- Model Training ------------------
+model = XGBClassifier(use_label_encoder=False, eval_metric='logloss')
+model.fit(X_train, y_train)
+
+# ----------------- Model Evaluation ----------------
+y_pred = model.predict(X_test)
+
+print("\nClassification Report:")
+print(classification_report(y_test, y_pred))
+
+print("\nConfusion Matrix:")
+cm = confusion_matrix(y_test, y_pred)
+disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=['No PPD', 'PPD'])
+disp.plot(cmap='Blues')
+plt.title("Confusion Matrix")
+plt.show()
+
+# ----------------- SHAP Explainability -------------
+print("\nGenerating SHAP values (this may take a moment)...")
+explainer = shap.Explainer(model, X_test)
+shap_values = explainer(X_test)
+
+# Visualize SHAP values
+shap.summary_plot(shap_values, X_test, plot_type='bar', show=False)
+plt.title("SHAP Feature Importance")
+plt.tight_layout()
+plt.savefig("shap_feature_importance.png")
+plt.show()
+
+# ----------------- Done ----------------------------
+print("✅ Model training and evaluation complete.")
